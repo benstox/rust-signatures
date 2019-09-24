@@ -1,12 +1,12 @@
 use std::env;
 
-const DOC_PAGES_PER_SHEET: usize = 4;
-const DOC_PAGES_PER_SIGNATURE: usize = 16;
+const DOC_PAGES_PER_SHEET: u32 = 4;
+const DOC_PAGES_PER_SIGNATURE: u32 = 16;
 const ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 fn parse_args(all_args: Vec<String>) -> (u32, u32) {
-    // convert the command line arguments to the numbers we need and
-    // make sure they are sensible
+    // Convert the command line arguments to the numbers we need and
+    // make sure they are sensible.
     println!("{:?}", all_args);
     let args = &all_args[1..]; // 0th element is name of the binary
     if args.len() < 2 {
@@ -14,8 +14,6 @@ fn parse_args(all_args: Vec<String>) -> (u32, u32) {
     }
     let first_arg = &args[0];
     let second_arg = &args[1];
-    // for some reason it doesn't like the ? operator on these parses:
-    // I get type mismatch "expected struct `std::num::ParseIntError`, found &str"
     let first_number: u32 = first_arg.parse().expect(&format!("First argument not a valid number! {}", first_arg));
     let second_number: u32 = second_arg.parse().expect(&format!("Second argument not a valid number! {}", second_arg));
     if first_number == 0 {
@@ -27,21 +25,28 @@ fn parse_args(all_args: Vec<String>) -> (u32, u32) {
     (first_number, second_number)
 }
 
+fn get_pages_sheets_signatures(first_number: u32, second_number: u32) -> (u32, u32, u32) {
+    // Calculate the number of pages, sheets and signatures in the document.
+    let num_pages = (second_number - first_number + 1) as u32;
+    let num_sheets = (num_pages as f32 / DOC_PAGES_PER_SHEET as f32).ceil() as u32;
+    let num_signatures = (num_pages as f32 / DOC_PAGES_PER_SIGNATURE as f32).ceil() as u32;
+    (num_pages, num_sheets, num_signatures)
+}
+
 fn main() {
     let all_args: Vec<String> = env::args().collect();
     let (first_number, second_number) = parse_args(all_args);
-    let num_pages = (second_number - first_number + 1) as usize;
-    let num_sheets = (num_pages as f32 / DOC_PAGES_PER_SHEET as f32).ceil() as usize;
-    let num_signatures = (num_pages as f32 / DOC_PAGES_PER_SIGNATURE as f32).ceil() as usize;
+    let (num_pages, num_sheets, num_signatures) = get_pages_sheets_signatures(first_number, second_number);
     println!("Number of document pages to print: {}", num_pages);
     println!("Number of sheets to print: {}", num_sheets);
     println!("Number of 4-sheet signatures to bind: {}", num_signatures);
     println!("#####################################");
     for (i, letter) in ALPHABET.chars().enumerate() {
-        if i as usize == num_signatures {
+        let i = i as u32;
+        if i == num_signatures {
             break;
         }
-        let first_page = (i * DOC_PAGES_PER_SIGNATURE) + 1;
+        let first_page = (DOC_PAGES_PER_SIGNATURE * i) + 1;
         let last_page = if (i + 1) * DOC_PAGES_PER_SIGNATURE < num_pages {
             (i + 1) * DOC_PAGES_PER_SIGNATURE
         } else {
@@ -61,6 +66,39 @@ fn main() {
 // Signature C. First page: 33, last page: 48
 // Signature D. First page: 49, last page: 60
 // #####################################
+
+#[test]
+fn test_get_pages_sheets_signatures() {
+    // smallest possible
+    let (num_pages, num_sheets, num_signatures) = get_pages_sheets_signatures(1, 1);
+    assert_eq!(num_pages, 1);
+    assert_eq!(num_sheets, 1);
+    assert_eq!(num_signatures, 1);
+
+    // full sheet
+    let (num_pages, num_sheets, num_signatures) = get_pages_sheets_signatures(1, 4);
+    assert_eq!(num_pages, 4);
+    assert_eq!(num_sheets, 1);
+    assert_eq!(num_signatures, 1);
+
+    // not starting at 1
+    let (num_pages, num_sheets, num_signatures) = get_pages_sheets_signatures(7, 8);
+    assert_eq!(num_pages, 2);
+    assert_eq!(num_sheets, 1);
+    assert_eq!(num_signatures, 1);
+
+    // larger one
+    let (num_pages, num_sheets, num_signatures) = get_pages_sheets_signatures(1, 60);
+    assert_eq!(num_pages, 60);
+    assert_eq!(num_sheets, 15);
+    assert_eq!(num_signatures, 4);
+    
+    // larger one not starting at 1
+    let (num_pages, num_sheets, num_signatures) = get_pages_sheets_signatures(12, 30);
+    assert_eq!(num_pages, 19);
+    assert_eq!(num_sheets, 5);
+    assert_eq!(num_signatures, 2);
+}
 
 #[test]
 fn test_parse_args() {
