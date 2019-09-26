@@ -4,6 +4,21 @@ const DOC_PAGES_PER_SHEET: u32 = 4;
 const DOC_PAGES_PER_SIGNATURE: u32 = 16;
 const ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
+#[derive(Debug)]
+struct Signature {
+   first_page: u32,
+   last_page: u32,
+   signature_key: &'static str,
+}
+
+#[derive(Debug)]
+struct DocumentInfo {
+    num_pages: u32,
+    num_sheets: u32,
+    num_signatures: u32,
+    signatures: Vec<Signature>,
+}
+
 fn parse_args(all_args: Vec<String>) -> (u32, u32) {
     // Convert the command line arguments to the numbers we need and
     // make sure they are sensible.
@@ -25,34 +40,55 @@ fn parse_args(all_args: Vec<String>) -> (u32, u32) {
     (first_number, second_number)
 }
 
-fn get_pages_sheets_signatures(first_number: u32, second_number: u32) -> (u32, u32, u32) {
+fn get_document_info(first_number: u32, second_number: u32) -> DocumentInfo {
     // Calculate the number of pages, sheets and signatures in the document.
     let num_pages = (second_number - first_number + 1) as u32;
     let num_sheets = (num_pages as f32 / DOC_PAGES_PER_SHEET as f32).ceil() as u32;
     let num_signatures = (num_pages as f32 / DOC_PAGES_PER_SIGNATURE as f32).ceil() as u32;
-    (num_pages, num_sheets, num_signatures)
+    let signatures = get_signatures(first_number, num_pages, num_signatures);
+    DocumentInfo {
+        num_pages,
+        num_sheets,
+        num_signatures,
+        signatures,
+    }
+}
+
+fn get_signatures(first_page_of_document: u32, num_pages: u32, num_signatures: u32) -> Vec<Signature> {
+    // get the starting and ending pages of each signature in the document
+    let last_page_of_document = first_page_of_document + num_pages - 1;
+    let mut signatures: Vec<Signature> = Vec::new();
+    for i in 0..num_signatures {
+        let last_page_of_signature = ((i + 1) * DOC_PAGES_PER_SIGNATURE) + first_page_of_document - 1;
+        let signature = Signature {
+            first_page: (DOC_PAGES_PER_SIGNATURE * i) + first_page_of_document,
+            last_page: if last_page_of_signature < last_page_of_document {
+                last_page_of_signature
+            } else {
+                last_page_of_document
+            },
+            signature_key: "A",
+        };
+        signatures.push(signature);
+    }
+    signatures
 }
 
 fn main() {
     let all_args: Vec<String> = env::args().collect();
     let (first_number, second_number) = parse_args(all_args);
-    let (num_pages, num_sheets, num_signatures) = get_pages_sheets_signatures(first_number, second_number);
-    println!("Number of document pages to print: {}", num_pages);
-    println!("Number of sheets to print: {}", num_sheets);
-    println!("Number of 4-sheet signatures to bind: {}", num_signatures);
+    let document_info = get_document_info(first_number, second_number);
+    println!("Number of document pages to print: {}", document_info.num_pages);
+    println!("Number of sheets to print: {}", document_info.num_sheets);
+    println!("Number of 4-sheet signatures to bind: {}", document_info.num_signatures);
     println!("#####################################");
-    for (i, letter) in ALPHABET.chars().enumerate() {
-        let i = i as u32;
-        if i == num_signatures {
-            break;
-        }
-        let first_page = (DOC_PAGES_PER_SIGNATURE * i) + 1;
-        let last_page = if (i + 1) * DOC_PAGES_PER_SIGNATURE < num_pages {
-            (i + 1) * DOC_PAGES_PER_SIGNATURE
-        } else {
-            num_pages  
-        };
-        println!("Signature {}. First page: {}, last page: {}", letter, first_page, last_page);
+    for signature in document_info.signatures {
+        println!(
+            "Signature {}. First page: {}, last_page: {}",
+            signature.signature_key,
+            signature.first_page,
+            signature.last_page,
+        )
     }
     println!("#####################################");
 }
@@ -68,36 +104,80 @@ fn main() {
 // #####################################
 
 #[test]
-fn test_get_pages_sheets_signatures() {
+fn test_get_signatures() {
+    // simple example
+    let first_number = 1;
+    let num_pages = 16;
+    let num_signatures = 1;
+    let signatures = get_signatures(first_number, num_pages, num_signatures); 
+    assert!(signatures.len() == 1);
+    assert!(signatures[0].first_page == 1);
+    assert!(signatures[0].last_page == 16);
+
+    // not using all the pages of a signature
+    let first_number = 1;
+    let num_pages = 9;
+    let num_signatures = 1;
+    let signatures = get_signatures(first_number, num_pages, num_signatures);
+    assert!(signatures.len() == 1);
+    assert!(signatures[0].first_page == 1);
+    assert!(signatures[0].last_page == 9);
+
+    // more than one signature
+    let first_number = 1;
+    let num_pages = 19;
+    let num_signatures = 2;
+    let signatures = get_signatures(first_number, num_pages, num_signatures);
+    assert!(signatures.len() == 2);
+    assert!(signatures[0].first_page == 1);
+    assert!(signatures[0].last_page == 16);
+    assert!(signatures[1].first_page == 17);
+    assert!(signatures[1].last_page == 19);
+
+    // not starting from the first page
+    let first_number = 5;
+    let num_pages = 19;
+    let num_signatures = 2;
+    let signatures = get_signatures(first_number, num_pages, num_signatures);
+    assert!(signatures.len() == 2);
+    println!("{:?}", signatures);
+    assert!(signatures[0].first_page == 5);
+    assert!(signatures[0].last_page == 20);
+    assert!(signatures[1].first_page == 21);
+    assert!(signatures[1].last_page == 23);
+}
+
+#[test]
+fn test_get_document_info() {
     // smallest possible
-    let (num_pages, num_sheets, num_signatures) = get_pages_sheets_signatures(1, 1);
-    assert_eq!(num_pages, 1);
-    assert_eq!(num_sheets, 1);
-    assert_eq!(num_signatures, 1);
+    let document_info = get_document_info(1, 1);
+    assert_eq!(document_info.num_pages, 1);
+    assert_eq!(document_info.num_sheets, 1);
+    assert_eq!(document_info.num_signatures, 1);
 
     // full sheet
-    let (num_pages, num_sheets, num_signatures) = get_pages_sheets_signatures(1, 4);
-    assert_eq!(num_pages, 4);
-    assert_eq!(num_sheets, 1);
-    assert_eq!(num_signatures, 1);
+    let document_info = get_document_info(1, 4);
+    assert_eq!(document_info.num_pages, 4);
+    assert_eq!(document_info.num_sheets, 1);
+    assert_eq!(document_info.num_signatures, 1);
 
     // not starting at 1
-    let (num_pages, num_sheets, num_signatures) = get_pages_sheets_signatures(7, 8);
-    assert_eq!(num_pages, 2);
-    assert_eq!(num_sheets, 1);
-    assert_eq!(num_signatures, 1);
+    let document_info = get_document_info(7, 8);
+    assert_eq!(document_info.num_pages, 2);
+    assert_eq!(document_info.num_sheets, 1);
+    assert_eq!(document_info.num_signatures, 1);
 
     // larger one
-    let (num_pages, num_sheets, num_signatures) = get_pages_sheets_signatures(1, 60);
-    assert_eq!(num_pages, 60);
-    assert_eq!(num_sheets, 15);
-    assert_eq!(num_signatures, 4);
+    let document_info = get_document_info(1, 60);
+    assert_eq!(document_info.num_pages, 60);
+    assert_eq!(document_info.num_sheets, 15);
+    assert_eq!(document_info.num_signatures, 4);
     
     // larger one not starting at 1
-    let (num_pages, num_sheets, num_signatures) = get_pages_sheets_signatures(12, 30);
-    assert_eq!(num_pages, 19);
-    assert_eq!(num_sheets, 5);
-    assert_eq!(num_signatures, 2);
+    let document_info = get_document_info(12, 30);
+    assert_eq!(document_info.num_pages, 19);
+    assert_eq!(document_info.num_sheets, 5);
+    assert_eq!(document_info.num_signatures, 2);
 }
 
 #[test]
