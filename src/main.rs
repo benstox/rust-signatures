@@ -8,7 +8,7 @@ const ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 struct Signature {
    first_page: u32,
    last_page: u32,
-   signature_key: &'static str,
+   signature_key: String,
 }
 
 #[derive(Debug)]
@@ -85,11 +85,27 @@ fn get_signatures(first_page_of_document: u32, num_pages: u32, num_signatures: u
             } else {
                 last_page_of_document
             },
-            signature_key: "A",
+            signature_key: get_signature_key(i),
         };
         signatures.push(signature);
     }
     signatures
+}
+
+fn get_signature_key(signature_i: u32) -> String {
+    // get the letter code that identifies each signature
+    let mut key = String::new();
+    let mut i = signature_i as usize;
+    loop {
+        let remainder = i % ALPHABET.len(); 
+        key.push_str(&ALPHABET[remainder..remainder + 1]);
+        i = i / ALPHABET.len();
+        if i == 0 {
+            break;
+        }
+        i = i - 1;
+    }
+    key.chars().rev().collect() // needs to be reversed since we're appending to the right
 }
 
 fn main() {
@@ -108,6 +124,22 @@ fn main() {
 // Signature C. First page: 33, last page: 48
 // Signature D. First page: 49, last page: 60
 // #####################################
+
+#[test]
+fn test_get_signature_key() {
+    assert_eq!(get_signature_key(0), "A");
+    assert_eq!(get_signature_key(1), "B");
+    assert_eq!(get_signature_key(2), "C");
+    assert_eq!(get_signature_key(25), "Z");
+    assert_eq!(get_signature_key(26), "AA");
+    assert_eq!(get_signature_key(27), "AB");
+    assert_eq!(get_signature_key(51), "AZ");
+    assert_eq!(get_signature_key(52), "BA");
+    assert_eq!(get_signature_key(78), "CA");
+    assert_eq!(get_signature_key(701), "ZZ");
+    assert_eq!(get_signature_key(702), "AAA");
+    assert_eq!(get_signature_key(703), "AAB");
+}
 
 #[test]
 fn test_get_signatures() {
