@@ -1,4 +1,5 @@
 use std::env;
+use std::process;
 
 const DOC_PAGES_PER_SHEET: u32 = 4;
 const DOC_PAGES_PER_SIGNATURE: u32 = 16;
@@ -51,25 +52,51 @@ impl DocumentInfo {
     }
 }
 
-fn parse_args(all_args: Vec<String>) -> (u32, u32) {
+fn parse_args(all_args: Vec<String>) -> Result<(u32, u32), String> {
     // Convert the command line arguments to the numbers we need and
     // make sure they are sensible.
-    println!("{:?}", all_args);
     let args = &all_args[1..]; // 0th element is name of the binary
     if args.len() < 2 {
-        panic!("Need at least two arguments to run! Got: {:?}", args)
+        let msg = format!("Need at least two arguments to run! Got: {:?}", args);
+        return Err(msg);
     }
     let first_arg = &args[0];
     let second_arg = &args[1];
-    let first_number: u32 = first_arg.parse().expect(&format!("First argument not a valid number! {}", first_arg));
-    let second_number: u32 = second_arg.parse().expect(&format!("Second argument not a valid number! {}", second_arg));
+    let first_number: u32 = match first_arg.parse() {
+        Ok(parsed_number) => parsed_number,
+        Err(parse_error) => {
+            let msg = format!(
+                "Couldn't parse the first argument, '{}', to a number. Got error: {}",
+                first_arg,
+                parse_error.to_string(),
+            );
+            return Err(msg);
+        },
+    };
+    let second_number: u32 = match second_arg.parse() {
+        Ok(parsed_number) => parsed_number,
+        Err(parse_error) => {
+            let msg = format!(
+                "Couldn't parse the second argument, '{}', to a number. Got error: {}",
+                second_arg,
+                parse_error.to_string(),
+            );
+            return Err(msg);
+        },
+    };
     if first_number == 0 {
-        panic!("There is no page zero! Received {} as a first arg.", first_number);
+        let msg = format!("There is no page zero! Received {} as the first number.", first_number);
+        return Err(msg);
     }
     if second_number < first_number {
-        panic!("The second number must be greater than or equal to the first! Received {} as a second arg.", second_number);
+        let msg = format!(
+            "The second number must be greater than or equal to the first! {} > {}.",
+            first_number,
+            second_number,
+        );
+        return Err(msg);
     }
-    (first_number, second_number)
+    Ok((first_number, second_number))
 }
 
 fn get_signatures(first_page_of_document: u32, num_pages: u32, num_signatures: u32) -> Vec<Signature> {
@@ -110,7 +137,10 @@ fn get_signature_key(signature_i: u32) -> String {
 
 fn main() {
     let all_args: Vec<String> = env::args().collect();
-    let (first_number, second_number) = parse_args(all_args);
+    let (first_number, second_number) = parse_args(all_args).unwrap_or_else(|err| {
+        println!("Problem parsing arguments: {}", err);
+        process::exit(1);
+    });
     let document_info = DocumentInfo::new(first_number, second_number);
     document_info.display();
 }
@@ -220,79 +250,150 @@ fn test_document_info_new() {
 
 #[test]
 fn test_parse_args() {
-    let (first_number, second_number) = parse_args(vec![
+    let error_msg = "parse_args should be returning Ok.";
+    let result = parse_args(vec![
         "target/debug/rust-signatures".to_string(),
         "1".to_string(),
         "60".to_string(),
     ]);
-    assert_eq!(first_number, 1);
-    assert_eq!(second_number, 60);
+    match result {
+        Ok((first_number, second_number)) => {
+            assert_eq!(first_number, 1);
+            assert_eq!(second_number, 60);
+        },
+        Err(result_error) => panic!(format!("{} Returned Err('{}').", error_msg, result_error)),
+    }
 
     // can be the same number twice
-    let (first_number, second_number) = parse_args(vec![
+    let result = parse_args(vec![
         "target/debug/rust-signatures".to_string(),
         "33".to_string(),
         "33".to_string(),
     ]);
-    assert_eq!(first_number, 33);
-    assert_eq!(second_number, 33);
+    match result {
+        Ok((first_number, second_number)) => {
+            assert_eq!(first_number, 33);
+            assert_eq!(second_number, 33);
+        },
+        Err(result_error) => panic!(format!("{} Returned Err('{}').", error_msg, result_error)),
+    }
 
     // doesn't matter if it gets extra args
-    let (first_number, second_number) = parse_args(vec![
+    let result = parse_args(vec![
         "target/debug/rust-signatures".to_string(),
         "5".to_string(),
         "185".to_string(),
         "asdfasdfad".to_string(),
     ]);
-    assert_eq!(first_number, 5);
-    assert_eq!(second_number, 185);
+    match result {
+        Ok((first_number, second_number)) => {
+            assert_eq!(first_number, 5);
+            assert_eq!(second_number, 185);
+        },
+        Err(result_error) => panic!(format!("{} Returned Err('{}').", error_msg, result_error)),
+    }
 }
 
 #[test]
-#[should_panic(expected = "Need at least two arguments to run!")]
 fn test_parse_args_insufficient_args() {
-    parse_args(vec![
+    let result = parse_args(vec![
+        "target/debug/rust-signatures".to_string(),
         "5".to_string(),
     ]);
+    match result {
+        Ok((first_number, second_number)) => {
+            panic!(format!(
+                "Should have errored because of insufficient arguments! Got Ok(({}, {})).",
+                first_number,
+                second_number,
+            ));
+        },
+        Err(result_error) => {
+            assert!(result_error.starts_with("Need at least two arguments to run!"));
+        },
+    }
 }
 
 #[test]
-#[should_panic(expected = "First argument not a valid number!")]
 fn test_parse_args_first_arg_not_number() {
-    parse_args(vec![
+    let result = parse_args(vec![
         "target/debug/rust-signatures".to_string(),
         "asdfasd".to_string(),
         "60".to_string(),
     ]);
+    match result {
+        Ok((first_number, second_number)) => {
+            panic!(format!(
+                "Should have errored because the first arg is not a number! Got Ok(({}, {})).",
+                first_number,
+                second_number,
+            ));
+        },
+        Err(result_error) => {
+            assert!(result_error.starts_with("Couldn't parse the first argument"));
+        },
+    }
 }
 
 #[test]
-#[should_panic(expected = "Second argument not a valid number!")]
 fn test_parse_args_second_arg_not_number() {
-    parse_args(vec![
+    let result = parse_args(vec![
         "target/debug/rust-signatures".to_string(),
         "345".to_string(),
         "asdfa60".to_string(),
     ]);
+    match result {
+        Ok((first_number, second_number)) => {
+            panic!(format!(
+                "Should have errored because the second arg is not a number! Got Ok(({}, {})).",
+                first_number,
+                second_number,
+            ));
+        },
+        Err(result_error) => {
+            assert!(result_error.starts_with("Couldn't parse the second argument"));
+        },
+    }
 }
 
 #[test]
-#[should_panic(expected = "There is no page zero!")]
 fn test_parse_args_first_arg_zero() {
-    parse_args(vec![
+    let result = parse_args(vec![
         "target/debug/rust-signatures".to_string(),
         "0".to_string(),
         "60".to_string(),
     ]);
+    match result {
+        Ok((first_number, second_number)) => {
+            panic!(format!(
+                "Should have errored because the first arg is zero! Got Ok(({}, {})).",
+                first_number,
+                second_number,
+            ));
+        },
+        Err(result_error) => {
+            assert!(result_error.starts_with("There is no page zero!"));
+        },
+    }
 }
 
 #[test]
-#[should_panic(expected = "The second number must be greater than")]
 fn test_parse_args_second_arg_smaller() {
-    parse_args(vec![
+    let result = parse_args(vec![
         "target/debug/rust-signatures".to_string(),
         "33".to_string(),
         "32".to_string(),
     ]);
+    match result {
+        Ok((first_number, second_number)) => {
+            panic!(format!(
+                "Should have errored because first arg > second arg! Got Ok(({}, {})).",
+                first_number,
+                second_number,
+            ));
+        },
+        Err(result_error) => {
+            assert!(result_error.starts_with("The second number must be greater than"));
+        },
+    }
 }
-
