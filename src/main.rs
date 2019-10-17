@@ -1,10 +1,61 @@
 use std::env;
+use std::error::Error;
+use std::fmt;
 use std::process;
 
+
+// Constants
 const DOC_PAGES_PER_SHEET: u32 = 4;
 const DOC_PAGES_PER_SIGNATURE: u32 = 16;
 const ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
+
+// Custom errors
+#[derive(Debug)]
+struct NeedTwoArgumentsError {
+    received_args: Vec<String>,
+}
+
+impl Error for NeedTwoArgumentsError {}
+
+impl fmt::Display for NeedTwoArgumentsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Need at least two arguments to run! Got: {:?}", &self.received_args[1..])
+    }
+}
+
+#[derive(Debug)]
+struct PageZeroError;
+
+impl Error for PageZeroError {}
+
+impl fmt::Display for PageZeroError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "There is no page zero! Received 0 as the first page number.")
+    }
+}
+
+#[derive(Debug)]
+struct SecondNumberGreaterError {
+    first_number: u32,
+    second_number: u32,
+}
+
+impl Error for SecondNumberGreaterError {}
+
+impl fmt::Display for SecondNumberGreaterError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "The second number must be greater than or equal to the first! {} > {}.",
+            self.first_number,
+            self.second_number,
+        )
+    }
+}
+
+
+// Data structs
 #[derive(Debug)]
 struct Signature {
    first_page: u32,
@@ -52,49 +103,24 @@ impl DocumentInfo {
     }
 }
 
-fn parse_args(all_args: Vec<String>) -> Result<(u32, u32), String> {
+
+// Work
+fn parse_args(all_args: Vec<String>) -> Result<(u32, u32), Box<dyn Error>> {
     // Convert the command line arguments to the numbers we need and
     // make sure they are sensible.
     let args = &all_args[1..]; // 0th element is name of the binary
     if args.len() < 2 {
-        let msg = format!("Need at least two arguments to run! Got: {:?}", args);
-        return Err(msg);
+        return Err((NeedTwoArgumentsError {received_args: all_args}).into());
     }
     let first_arg = &args[0];
     let second_arg = &args[1];
-    let first_number: u32 = match first_arg.parse() {
-        Ok(parsed_number) => parsed_number,
-        Err(parse_error) => {
-            let msg = format!(
-                "Couldn't parse the first argument, '{}', to a number. Got error: {}",
-                first_arg,
-                parse_error.to_string(),
-            );
-            return Err(msg);
-        },
-    };
-    let second_number: u32 = match second_arg.parse() {
-        Ok(parsed_number) => parsed_number,
-        Err(parse_error) => {
-            let msg = format!(
-                "Couldn't parse the second argument, '{}', to a number. Got error: {}",
-                second_arg,
-                parse_error.to_string(),
-            );
-            return Err(msg);
-        },
-    };
+    let first_number: u32 = first_arg.parse()?;
+    let second_number: u32 = second_arg.parse()?;
     if first_number == 0 {
-        let msg = format!("There is no page zero! Received {} as the first number.", first_number);
-        return Err(msg);
+        return Err(PageZeroError.into());
     }
     if second_number < first_number {
-        let msg = format!(
-            "The second number must be greater than or equal to the first! {} > {}.",
-            first_number,
-            second_number,
-        );
-        return Err(msg);
+        return Err((SecondNumberGreaterError {first_number, second_number}).into());
     }
     Ok((first_number, second_number))
 }
@@ -155,6 +181,8 @@ fn main() {
 // Signature D. First page: 49, last page: 60
 // #####################################
 
+
+// Tests
 #[test]
 fn test_get_signature_key() {
     assert_eq!(get_signature_key(0), "A");
@@ -309,7 +337,8 @@ fn test_parse_args_insufficient_args() {
             ));
         },
         Err(result_error) => {
-            assert!(result_error.starts_with("Need at least two arguments to run!"));
+            let error_msg = format!("{}", result_error);
+            assert!(error_msg.starts_with("Need at least two arguments to run!"));
         },
     }
 }
@@ -330,7 +359,8 @@ fn test_parse_args_first_arg_not_number() {
             ));
         },
         Err(result_error) => {
-            assert!(result_error.starts_with("Couldn't parse the first argument"));
+            let error_msg = format!("{}", result_error);
+            assert!(error_msg.starts_with("invalid digit found in string"));
         },
     }
 }
@@ -351,7 +381,8 @@ fn test_parse_args_second_arg_not_number() {
             ));
         },
         Err(result_error) => {
-            assert!(result_error.starts_with("Couldn't parse the second argument"));
+            let error_msg = format!("{}", result_error);
+            assert!(error_msg.starts_with("invalid digit found in string"));
         },
     }
 }
@@ -372,7 +403,8 @@ fn test_parse_args_first_arg_zero() {
             ));
         },
         Err(result_error) => {
-            assert!(result_error.starts_with("There is no page zero!"));
+            let error_msg = format!("{}", result_error);
+            assert!(error_msg.starts_with("There is no page zero!"));
         },
     }
 }
@@ -393,7 +425,8 @@ fn test_parse_args_second_arg_smaller() {
             ));
         },
         Err(result_error) => {
-            assert!(result_error.starts_with("The second number must be greater than"));
+            let error_msg = format!("{}", result_error);
+            assert!(error_msg.starts_with("The second number must be greater than"));
         },
     }
 }
